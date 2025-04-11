@@ -136,6 +136,6 @@ if __name__ == '__main__':
 
     app = aiohttp.web.Application()
     app.add_routes(routes)
-    aiohttp.web.run_app(app, host='0.0.0.0', port=34000) # this function never returns
+    aiohttp.web.run_app(app, host='0.0.0.0', port=34001) # this function never returns
     if client is not None:
         asyncio.run(client.close())

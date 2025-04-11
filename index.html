@@ -1,44 +1,270 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="utf-8">
-    <title>Weather Microservice</title>
-    <script>
-    function sendPOST() {
-      let formData = { course: document.getElementById('course').value };
-      fetch('/weather', {
-        method: 'POST',
-        body: JSON.stringify(formData),
-        headers: {'Content-Type': 'application/json'},
-      }).then(res => res.json()).then(data => {
-        if ('error' in data) {
-          document.getElementById('content').innerHTML = `<hr><h3>Error</h3><p>${JSON.stringify(data)}</p>`;
-        } else {
-          let meetingDate = new Date(Date.parse(data.nextCourseMeeting));
-          let meetingDateStr = meetingDate.toLocaleString('en-US', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit'
-          })
-
-          let forecastDate = new Date(Date.parse(data.forecastTime));
-          let forecastDateStr = forecastDate.toLocaleString('en-US', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit'
-          })        
-
-          document.getElementById('content').innerHTML = `<hr><h3>Weather for the next ${data.course} meeting</h3><ul><li>Next Meeting: ${meetingDateStr}</li><li>Forecast Time: ${forecastDateStr}</li><li>Temperature: ${data.temperature}°F</li><li>Forecast: ${data.shortForecast}</li></ul>`
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UIUC Weather Forecast</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 320px; }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
         }
-      }).catch(err => {
-        document.getElementById('content').innerHTML = `<hr><h3>Error ${err.name}</h3><p>${err.message}</p>`;
-      })
-    };
-    </script>    
-  </head>
-  <body>
-      <h1>Weather of Your Next Course Meeting</h1>
-      <p>
-        <label>Course: <input type="text" id="course" placeholder="Course Subject and Number"></label>
-        <button onclick="sendPOST();">Get Weather!</button>
-      </p>
-      <div id="content"></div>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Add text color for input */
+        input {
+            color: #1a1a1a;
+        }
+        .uiuc-gradient {
+            background: linear-gradient(135deg, #13294B 0%, #E84A27 100%);
+        }
+        .uiuc-blue {
+            background-color: #13294B;
+        }
+        .uiuc-orange {
+            background-color: #E84A27;
+        }
+        .uiuc-text-orange {
+            color: #E84A27;
+        }
+        .uiuc-text-blue {
+            color: #13294B;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient-to-b from-[#13294B] to-gray-800 text-gray-100 min-h-screen">
+        <!-- Header -->
+        <header class="uiuc-gradient text-white px-6 py-4 flex justify-between items-center shadow-md">
+            <div class="flex items-center">
+                <h1 class="text-xl font-bold">UIUC Weather Forecast</h1>
+                <span class="ml-2 text-sm">by Jayesh G</span>
+            </div>
+            <nav>
+                <a href="#" class="text-white hover:text-gray-200 mr-4" aria-label="About this application">About</a>
+                <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-white hover:text-gray-200" aria-label="View source code" target="_blank" rel="noopener noreferrer">Source</a>
+            </nav>
+        </header>
+
+        <!-- Hero Section -->
+        <section class="max-w-2xl mx-auto text-center py-12 px-4">
+            <h2 class="text-4xl lg:text-5xl font-bold text-white mb-4">
+                <span class="uiuc-text-orange">Illinois</span> Weather, 
+                <span class="uiuc-text-orange">Illinois</span> Classes
+            </h2>
+            <p class="text-lg text-gray-200">Never get caught in the rain between classes again. Get real-time weather forecasts for your next UIUC course meeting.</p>
+        </section>
+
+        <!-- Course Selector Card -->
+        <section class="max-w-xl mx-auto px-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-4">
+                <input type="text" id="course" placeholder="e.g. CS 101" 
+                       class="w-full md:w-48 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#E84A27] text-gray-900"
+                       aria-label="Enter UIUC course code">
+                <button onclick="getWeather()" id="weatherButton" 
+                        class="px-6 py-2 uiuc-orange text-white rounded-lg hover:bg-[#c53d1f] transition flex items-center justify-center"
+                        aria-label="Get weather forecast">
+                    <span>Get Weather</span>
+                    <span id="loadingSpinner" class="loading hidden"></span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Weather Result Section -->
+        <section id="weatherResult" class="hidden"></section>
+
+        <!-- Weather Map -->
+        <section id="weatherMap" class="hidden max-w-3xl mx-auto px-4 mt-8">
+            <div class="rounded-xl shadow-lg overflow-hidden">
+                <div id="map" class="h-80 w-full"></div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="text-center text-sm text-gray-400 py-6 mt-12">
+            <p id="footerContent">Data from OpenWeatherMap | <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-[#E84A27] hover:text-[#c53d1f] transition" target="_blank" rel="noopener noreferrer">Source Code</a></p>
+        </footer>
     </div>
-  </body>
+
+    <script>
+        // Weather condition mapping
+        const weatherConditions = {
+            sunny: {
+                borderBgClasses: 'border-yellow-400 bg-yellow-100/20',
+                icon: `<svg class="w-12 h-12 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>`,
+                tagline: "Sun's out—time to code under the open sky!"
+            },
+            cloudy: {
+                borderBgClasses: 'border-gray-400 bg-gray-100/20',
+                icon: `<svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                      </svg>`,
+                tagline: "Cloudy skies, bright ideas—let's get to work."
+            },
+            rain: {
+                borderBgClasses: 'border-blue-400 bg-blue-100/20',
+                icon: `<svg class="w-12 h-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 15v2m4-2v2m4-2v2" />
+                      </svg>`,
+                tagline: "Don't forget your umbrella—stay dry (and inspired)."
+            },
+            snow: {
+                borderBgClasses: 'border-teal-400 bg-teal-100/20',
+                icon: `<svg class="w-12 h-12 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 15v2m4-2v2m4-2v2" />
+                      </svg>`,
+                tagline: "Snow day! Perfect excuse for hot cocoa and hot code."
+            },
+            default: {
+                borderBgClasses: 'border-white/20 bg-white/10',
+                icon: `<svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>`,
+                tagline: "Weather's here—let's get moving."
+            }
+        };
+
+        function getWeatherCondition(description) {
+            const desc = description.toLowerCase();
+            if (desc.includes('sun') || desc.includes('clear')) return 'sunny';
+            if (desc.includes('cloud')) return 'cloudy';
+            if (desc.includes('rain')) return 'rain';
+            if (desc.includes('snow')) return 'snow';
+            return 'default';
+        }
+
+        function createWeatherCard({ nextMeeting, forecastTime, temperature, description }) {
+            const condition = getWeatherCondition(description);
+            const { borderBgClasses, icon, tagline } = weatherConditions[condition] || weatherConditions.default;
+
+            return `
+                <div class="border rounded-xl p-6 mt-8 max-w-md mx-auto flex flex-col items-center space-y-4 ${borderBgClasses}">
+                    <div class="flex items-center space-x-4">
+                        ${icon}
+                        <h2 class="text-5xl font-bold">${temperature}°F</h2>
+                    </div>
+                    <p class="italic text-gray-200">${tagline}</p>
+                    <ul class="list-disc list-inside space-y-1 text-gray-200">
+                        <li><strong>Next Meeting:</strong> ${nextMeeting}</li>
+                        <li><strong>Forecast Time:</strong> ${forecastTime}</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+        let map;
+        let marker;
+        let currentCondition = '';
+
+        function initMap() {
+            map = L.map('map').setView([40.11, -88.24], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        function updateFooter(condition) {
+            const footer = document.getElementById('footerContent');
+            if (condition.includes('rain')) {
+                footer.innerHTML = 'Rainy day at Illinois? Check out my portfolio while you wait!';
+            } else {
+                footer.innerHTML = 'Data from OpenWeatherMap | <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-[#E84A27] hover:text-[#c53d1f] transition" target="_blank" rel="noopener noreferrer">Source Code</a>';
+            }
+        }
+
+        function getWeather() {
+            const course = document.getElementById('course').value;
+            if (!course) return;
+
+            console.log('Fetching weather for course:', course);
+
+            const button = document.getElementById('weatherButton');
+            const spinner = document.getElementById('loadingSpinner');
+            button.disabled = true;
+            spinner.classList.remove('hidden');
+
+            fetch('/weather', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ course })
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('Received data:', data);
+                if ('error' in data) {
+                    throw new Error(data.error);
+                }
+
+                const resultSection = document.getElementById('weatherResult');
+                const mapSection = document.getElementById('weatherMap');
+                resultSection.classList.remove('hidden');
+                mapSection.classList.remove('hidden');
+
+                const meetingDate = new Date(data.nextCourseMeeting);
+                const forecastDate = new Date(data.forecastTime);
+
+                const nextMeeting = meetingDate.toLocaleString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                });
+
+                const forecastTime = forecastDate.toLocaleString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                });
+
+                currentCondition = data.shortForecast.toLowerCase();
+                updateFooter(currentCondition);
+
+                resultSection.innerHTML = createWeatherCard({
+                    nextMeeting,
+                    forecastTime,
+                    temperature: data.temperature,
+                    description: data.shortForecast
+                });
+
+                if (!map) {
+                    initMap();
+                }
+                if (marker) {
+                    map.removeLayer(marker);
+                }
+                marker = L.marker([40.11, -88.24]).addTo(map);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert(`Error: ${error.message}`);
+            })
+            .finally(() => {
+                button.disabled = false;
+                spinner.classList.add('hidden');
+            });
+        }
+    </script>
+</body>
 </html>
