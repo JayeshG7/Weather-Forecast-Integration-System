@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UIUC Weather Forecast</title>
+    <title>UIUC Weather for Your Next Class</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
     <style>
         #map { height: 320px; }
         .loading {
@@ -26,10 +27,10 @@
             color: #1a1a1a;
         }
         .uiuc-gradient {
-            background: linear-gradient(135deg, #13294B 0%, #E84A27 100%);
+            background: linear-gradient(135deg, #E84A27 0%, #0C234B 100%);
         }
         .uiuc-blue {
-            background-color: #13294B;
+            background-color: #0C234B;
         }
         .uiuc-orange {
             background-color: #E84A27;
@@ -38,21 +39,37 @@
             color: #E84A27;
         }
         .uiuc-text-blue {
-            color: #13294B;
+            color: #0C234B;
+        }
+        .skeleton {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .leaflet-control-layers {
+            background: rgba(255, 255, 255, 0.9) !important;
+            border-radius: 4px !important;
         }
     </style>
 </head>
 <body>
-    <div class="bg-gradient-to-b from-[#13294B] to-gray-800 text-gray-100 min-h-screen">
+    <div class="bg-gradient-to-b from-[#0C234B] to-gray-800 text-gray-100 min-h-screen">
         <!-- Header -->
         <header class="uiuc-gradient text-white px-6 py-4 flex justify-between items-center shadow-md">
-            <div class="flex items-center">
-                <h1 class="text-xl font-bold">UIUC Weather Forecast</h1>
-                <span class="ml-2 text-sm">by Jayesh G</span>
-            </div>
+            <h1 class="text-xl font-bold">UIUC Weather for Your Next Class</h1>
+            
             <nav>
-                <a href="#" class="text-white hover:text-gray-200 mr-4" aria-label="About this application">About</a>
-                <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-white hover:text-gray-200" aria-label="View source code" target="_blank" rel="noopener noreferrer">Source</a>
+                <a href="#" class="text-white hover:text-gray-200 mr-4 focus:ring-2 focus:ring-white rounded" aria-label="About this application">About</a>
+                <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-white hover:text-gray-200 focus:ring-2 focus:ring-white rounded" aria-label="View source code" target="_blank" rel="noopener noreferrer">Source</a>
             </nav>
         </header>
 
@@ -67,17 +84,19 @@
 
         <!-- Course Selector Card -->
         <section class="max-w-xl mx-auto px-4">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 flex flex-col md:flex-row items-center gap-4">
-                <input type="text" id="course" placeholder="e.g. CS 101" 
-                       class="w-full md:w-48 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#E84A27] text-gray-900"
-                       aria-label="Enter UIUC course code">
-                <button onclick="getWeather()" id="weatherButton" 
-                        class="px-6 py-2 uiuc-orange text-white rounded-lg hover:bg-[#c53d1f] transition flex items-center justify-center"
-                        aria-label="Get weather forecast">
-                    <span>Get Weather</span>
-                    <span id="loadingSpinner" class="loading hidden"></span>
-                </button>
-            </div>
+            <form id="weatherForm" class="bg-gray-700 rounded-xl shadow-lg p-6 flex flex-col md:flex-row items-center justify-center gap-4 hover:shadow-xl transition-shadow">
+                <div class="flex flex-col md:flex-row items-center justify-center gap-4 w-full">
+                    <input type="text" id="course" placeholder="e.g. CS 101" 
+                           class="w-full md:w-48 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#E84A27] text-gray-900 text-center"
+                           aria-label="Enter UIUC course code" aria-required="true">
+                    <button type="submit" id="weatherButton" 
+                            class="px-6 py-2 uiuc-orange text-white rounded-lg hover:bg-[#c53d1f] hover:scale-105 transition-all duration-200 flex items-center justify-center focus:ring-2 focus:ring-white"
+                            aria-label="Get weather forecast">
+                        <span id="buttonText">Get Weather</span>
+                        <span id="loadingSpinner" class="loading hidden"></span>
+                    </button>
+                </div>
+            </form>
         </section>
 
         <!-- Weather Result Section -->
@@ -85,18 +104,84 @@
 
         <!-- Weather Map -->
         <section id="weatherMap" class="hidden max-w-3xl mx-auto px-4 mt-8">
-            <div class="rounded-xl shadow-lg overflow-hidden">
-                <div id="map" class="h-80 w-full"></div>
+            <div class="relative rounded-xl overflow-hidden shadow-lg">
+                <div id="map" class="h-80 w-full" aria-label="Map showing course location weather"></div>
+                <div class="absolute inset-0 bg-black/20 pointer-events-none"></div>
             </div>
         </section>
 
+        <!-- Skeleton Loaders -->
+        <div id="skeletonLoaders" class="hidden">
+            <div class="skeleton bg-gray-700 rounded-xl p-6 max-w-md mx-auto h-48 mt-8"></div>
+            <div class="skeleton bg-gray-700 rounded-xl h-80 max-w-3xl mx-auto mt-8"></div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="hidden text-red-400 text-center mt-4"></div>
+
         <!-- Footer -->
         <footer class="text-center text-sm text-gray-400 py-6 mt-12">
-            <p id="footerContent">Data from OpenWeatherMap | <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-[#E84A27] hover:text-[#c53d1f] transition" target="_blank" rel="noopener noreferrer">Source Code</a></p>
+            <p id="footerContent">Data from National Weather Service | <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-[#E84A27] hover:text-[#c53d1f] transition" target="_blank" rel="noopener noreferrer">Source Code</a></p>
+            <p class="mt-2">Created by Jayesh G</p>
         </footer>
     </div>
 
     <script>
+        // Course location mapping
+        const courseLocations = {
+            "CS 101": { address: "1308 W Main St, Urbana, IL", lat: 40.110587, lng: -88.226003 },
+            "ADV 492": { address: "104 Gregory Hall, Urbana, IL", lat: 40.110075, lng: -88.226245 },
+            "MATH 231": { address: "1409 W Green St, Urbana, IL", lat: 40.110587, lng: -88.226003 },
+            "PHYS 211": { address: "1110 W Green St, Urbana, IL", lat: 40.110587, lng: -88.226003 },
+            "CHEM 102": { address: "600 S Mathews Ave, Urbana, IL", lat: 40.110587, lng: -88.226003 }
+        };
+
+        let map;
+        let marker;
+        let weatherLayer;
+        let radarLayer;
+        let currentCondition = '';
+
+        function initMap() {
+            map = L.map('map').setView([40.11, -88.24], 13);
+            
+            // Base layers
+            const streets = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors'
+            });
+
+            // Weather layers
+            const radar = L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png', {
+                attribution: 'NOAA/NWS',
+                opacity: 0.5
+            });
+
+            // Add layer control
+            const baseLayers = {
+                "Streets": streets
+            };
+
+            const overlays = {
+                "Radar": radar
+            };
+
+            L.control.layers(baseLayers, overlays).addTo(map);
+            streets.addTo(map);
+        }
+
+        function updateMap(lat, lng) {
+            if (!map) {
+                initMap();
+            }
+            
+            map.setView([lat, lng], 15);
+            
+            if (marker) {
+                map.removeLayer(marker);
+            }
+            marker = L.marker([lat, lng]).addTo(map);
+        }
+
         // Weather condition mapping
         const weatherConditions = {
             sunny: {
@@ -152,13 +237,13 @@
             const { borderBgClasses, icon, tagline } = weatherConditions[condition] || weatherConditions.default;
 
             return `
-                <div class="border rounded-xl p-6 mt-8 max-w-md mx-auto flex flex-col items-center space-y-4 ${borderBgClasses}">
+                <div class="fade-in border rounded-xl p-6 mt-8 max-w-md mx-auto flex flex-col items-center space-y-4 ${borderBgClasses}">
                     <div class="flex items-center space-x-4">
                         ${icon}
                         <h2 class="text-5xl font-bold">${temperature}°F</h2>
                     </div>
                     <p class="italic text-gray-200">${tagline}</p>
-                    <ul class="list-disc list-inside space-y-1 text-gray-200">
+                    <ul class="list-disc list-inside space-y-3 text-gray-200">
                         <li><strong>Next Meeting:</strong> ${nextMeeting}</li>
                         <li><strong>Forecast Time:</strong> ${forecastTime}</li>
                     </ul>
@@ -166,54 +251,61 @@
             `;
         }
 
-        let map;
-        let marker;
-        let currentCondition = '';
-
-        function initMap() {
-            map = L.map('map').setView([40.11, -88.24], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-        }
-
         function updateFooter(condition) {
             const footer = document.getElementById('footerContent');
             if (condition.includes('rain')) {
                 footer.innerHTML = 'Rainy day at Illinois? Check out my portfolio while you wait!';
             } else {
-                footer.innerHTML = 'Data from OpenWeatherMap | <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-[#E84A27] hover:text-[#c53d1f] transition" target="_blank" rel="noopener noreferrer">Source Code</a>';
+                footer.innerHTML = 'Data from National Weather Service | <a href="https://github.com/JayeshG7/Weather-Forecast-Integration-System" class="text-[#E84A27] hover:text-[#c53d1f] transition" target="_blank" rel="noopener noreferrer">Source Code</a>';
             }
         }
 
-        function getWeather() {
+        document.getElementById('weatherForm').addEventListener('submit', function(e) {
+            e.preventDefault();
             const course = document.getElementById('course').value;
             if (!course) return;
 
-            console.log('Fetching weather for course:', course);
-
             const button = document.getElementById('weatherButton');
+            const buttonText = document.getElementById('buttonText');
             const spinner = document.getElementById('loadingSpinner');
+            const skeletonLoaders = document.getElementById('skeletonLoaders');
+            const errorMessage = document.getElementById('errorMessage');
+            const resultSection = document.getElementById('weatherResult');
+            const mapSection = document.getElementById('weatherMap');
+
+            // Reset states
             button.disabled = true;
+            buttonText.classList.add('hidden');
             spinner.classList.remove('hidden');
+            skeletonLoaders.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+            mapSection.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            // Normalize course code
+            const normalizedCourse = course.toUpperCase().replace(/\s+/g, " ");
+            
+            // Update map location if course is in our mapping
+            if (courseLocations[normalizedCourse]) {
+                const { lat, lng } = courseLocations[normalizedCourse];
+                updateMap(lat, lng);
+            } else {
+                // Default to campus center
+                updateMap(40.11, -88.24);
+            }
 
             fetch('/weather', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ course })
             })
-            .then(response => {
-                console.log('Response status:', response.status);
-                return response.json();
-            })
+            .then(response => response.json())
             .then(data => {
-                console.log('Received data:', data);
                 if ('error' in data) {
                     throw new Error(data.error);
                 }
 
-                const resultSection = document.getElementById('weatherResult');
-                const mapSection = document.getElementById('weatherMap');
+                skeletonLoaders.classList.add('hidden');
                 resultSection.classList.remove('hidden');
                 mapSection.classList.remove('hidden');
 
@@ -247,24 +339,19 @@
                     temperature: data.temperature,
                     description: data.shortForecast
                 });
-
-                if (!map) {
-                    initMap();
-                }
-                if (marker) {
-                    map.removeLayer(marker);
-                }
-                marker = L.marker([40.11, -88.24]).addTo(map);
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert(`Error: ${error.message}`);
+                skeletonLoaders.classList.add('hidden');
+                errorMessage.classList.remove('hidden');
+                errorMessage.textContent = `Error: ${error.message}`;
             })
             .finally(() => {
                 button.disabled = false;
+                buttonText.classList.remove('hidden');
                 spinner.classList.add('hidden');
             });
-        }
-    </script>
-</body>
+        });
+    </script>    
+  </body>
 </html>
