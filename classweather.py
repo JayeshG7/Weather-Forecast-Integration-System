@@ -4,6 +4,11 @@ import os
 from datetime import datetime, timedelta, time
 from aiohttp.web import RouteTableDef, run_app, Application, Request, Response, FileResponse, json_response
 import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Load environment variables from localvariables.env
+# If you rename your file to .env, you can just use load_dotenv() without arguments.
+load_dotenv(dotenv_path='localvariables.env') 
 
 routes = RouteTableDef()
 weather_cache = {}
@@ -87,7 +92,7 @@ async def generate_ai_nudge(weather_data, course_info):
             readable_time = next_meeting_time_str # Fallback to the original string
 
         prompt = f"""You are the Illini Weather Assistant, a friendly, slightly witty, and helpful AI for University of Illinois students.
-        Your goal is to provide a concise (1-2 sentences) and actionable nudge based on the weather for their upcoming class.
+        Your goal is to provide a concise (2-3 sentences) and actionable insight for their upcoming class, including a brief suggestion on what to wear.
         Incorporate UIUC-specific language or campus references if it feels natural. Be encouraging!
 
         Context:
@@ -96,7 +101,7 @@ async def generate_ai_nudge(weather_data, course_info):
         - Weather Condition: {condition}
         - Temperature: {temp}°F
 
-        Generate a personalized nudge for the student:"""
+        Generate a personalized insight and what-to-wear suggestion for the student:"""
 
         response = await asyncio.to_thread(gemini_model.generate_content, prompt)
         
